@@ -1,0 +1,36 @@
+name: Repo Forensic Analysis
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # IMPORTANT: Fetches all history for git log analysis
+
+      - name: Setup Node.js
+        uses: actions/checkout@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Tool
+        run: npm run build
+
+      - name: Run Forensic Analysis
+        run: node dist/src/index.js . --json > forensic-report.json
+
+      - name: Upload Report Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forensic-report
+          path: forensic-report.json

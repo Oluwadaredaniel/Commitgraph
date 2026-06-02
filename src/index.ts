@@ -2,7 +2,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import path from 'path';
-import fs from 'fs';
 import { GitExtractor } from './git/extractor.js';
 import { HotspotAnalyzer } from './analyzers/hotspots.js';
 import { KnowledgeAnalyzer } from './analyzers/knowledge.js';
@@ -16,6 +15,7 @@ program
   .version('1.0.0')
   .argument('[path]', 'path to git repository', '.')
   .option('-j, --json', 'output results as JSON')
+  .option('-m, --markdown', 'output results as GitHub Markdown')
   .action(async (repoPathArg, options) => {
     const repoPath = path.resolve(repoPathArg);
     const extractor = new GitExtractor(repoPath);
@@ -23,28 +23,38 @@ program
     try {
       const commits = await extractor.extractLog();
       
+      if (commits.length === 0) {
+        if (options.json) {
+          console.log(JSON.stringify({ error: 'No commits found' }));
+        } else {
+          console.log(chalk.yellow('⚠️ No commits found. Try running in a Git repository with history.'));
+        }
+        return;
+      }
+
       const hotspots = new HotspotAnalyzer().analyze(commits);
       const knowledge = new KnowledgeAnalyzer().analyze(commits);
       const coupling = new CouplingAnalyzer().analyze(commits);
 
-      const fullReport = {
-        meta: {
-          analyzedAt: new Date().toISOString(),
-          repo: repoPath,
-          totalCommits: commits.length
-        },
-        hotspots,
-        knowledge,
-        coupling
-      };
-
-      // Check if user wants JSON output
+      // JSON OUTPUT MODE
       if (options.json) {
+        const fullReport = {
+          meta: { analyzedAt: new Date().toISOString(), repo: repoPath, totalCommits: commits.length },
+          hotspots,
+          knowledge,
+          coupling
+        };
         console.log(JSON.stringify(fullReport, null, 2));
         return;
       }
 
-      // --- OTHERWISE: Render the Pretty Terminal UI ---
+      // MARKDOWN OUTPUT MODE (For GitHub PR Comments)
+      if (options.markdown) {
+        console.log(generateMarkdownReport(hotspots, knowledge, coupling));
+        return;
+      }
+
+      // STANDARD TERMINAL MODE
       renderTerminalUI(repoPath, hotspots, knowledge, coupling);
 
     } catch (error) {
@@ -53,29 +63,67 @@ program
     }
   });
 
-function renderTerminalUI(path: string, hotspots: any[], knowledge: any[], coupling: any[]) {
-  console.log(chalk.bold.cyan(`\n🚀 CommitGraph: Analyzing [${path}]...`));
+function renderTerminalUI(repoPath: string, hotspots: any[], knowledge: any[], coupling: any[]) {
+  console.log(chalk.bold.cyan(`\n🚀 CommitGraph: Analyzing [${repoPath}]...`));
 
-  // 1. Heatmap
-  console.log(chalk.bold.red('\n🔥 MAINTENANCE HEATMAP:'));
+  console.log(chalk.bold.red('\n🔥 MAINTENANCE HEATMAP (High-Activity Areas):'));
+  hotspots.slice(0, 7).forEach(h => {
+    const riskColor = h.score > 25 ? chalk.red : h.score > 12 ? chalk.yellow : chalk.green;
+    const status = h.score > 25 ? '🚨 NEEDS CLEANUP' : h.score > 12 ? '⚠️ GETTING MESSY' : '✅ STABLE';
+    console.log(`${riskColor('●')} ${h.file.padEnd(35)} | Score: ${riskColor(h.score.toFixed(1).padEnd(5))} | ${chalk.bold(status)}`);
+  });
+
+  console.log(chalk.bold.blue('\n👥 TEAM COVERAGE (Knowledge Risks):'));
+  knowledge.slice(0, 5).forEach(item => {
+    const owner = item.owners[0];
+    const risk = owner.percentage > 80 ? chalk.red('Only 1 person knows this!') : chalk.green('Shared knowledge');
+    console.log(`  ${item.file.padEnd(35)}: ${owner.author} (${owner.percentage}%) - ${risk}`);
+  });
+
+  console.log(chalk.bold.magenta('\n🔗 HIDDEN DEPENDENCIES (Files that travel together):'));
+  if (couplingResultsExist(coupling)) {
+    coupling.slice(0, 5).forEach(c => {
+      console.log(`  ${c.pair[0]} + ${c.pair[1]}`);
+      console.log(chalk.dim(`  └─ These change together (${(c.degree * 100).toFixed(0)}%). Check for architectural debt!`));
+    });
+  } else {
+    console.log(chalk.dim('  Files are well-separated. No "package deals" found.'));
+  }
+
+  console.log(chalk.bold.cyan('\n✅ Analysis Complete.\n'));
+}
+
+function generateMarkdownReport(hotspots: any[], knowledge: any[], coupling: any[]): string {
+  let md = `## 📊 CommitGraph Forensic Report\n\n`;
+
+  md += `### 🔥 Maintenance Heatmap\n`;
+  md += `| File | Risk Score | Status |\n| :--- | :--- | :--- |\n`;
   hotspots.slice(0, 5).forEach(h => {
-    const color = h.score > 25 ? chalk.red : chalk.yellow;
-    console.log(`${color('●')} ${h.file.padEnd(30)} | Score: ${h.score.toFixed(1)}`);
+    const status = h.score > 25 ? '🚨 Cleanup Needed' : '✅ Stable';
+    md += `| \`${h.file}\` | ${h.score.toFixed(1)} | ${status} |\n`;
   });
 
-  // 2. Coverage
-  console.log(chalk.bold.blue('\n👥 TEAM COVERAGE:'));
+  md += `\n### 👥 Team Coverage\n`;
+  md += `| File | Primary Owner | Coverage |\n| :--- | :--- | :--- |\n`;
   knowledge.slice(0, 5).forEach(k => {
-    console.log(`  ${k.file.padEnd(30)}: ${k.owners[0].author} (${k.owners[0].percentage}%)`);
+    md += `| \`${k.file}\` | ${k.owners[0].author} | ${k.owners[0].percentage}% |\n`;
   });
 
-  // 3. Dependencies
-  console.log(chalk.bold.magenta('\n🔗 HIDDEN DEPENDENCIES:'));
-  coupling.slice(0, 5).forEach(c => {
-    console.log(`  ${c.pair[0]} + ${c.pair[1]} (${(c.degree * 100).toFixed(0)}%)`);
-  });
+  md += `\n### 🔗 Hidden Dependencies\n`;
+  if (coupling.length > 0) {
+    coupling.slice(0, 3).forEach(c => {
+      md += `- **${c.pair[0]}** + **${c.pair[1]}** change together **${(c.degree * 100).toFixed(0)}%** of the time.\n`;
+    });
+  } else {
+    md += `_No significant hidden dependencies detected._\n`;
+  }
 
-  console.log('\n');
+  md += `\n\n*Generated by [CommitGraph](https://github.com/Oluwadaredaniel/Commitgraph)*`;
+  return md;
+}
+
+function couplingResultsExist(coupling: any[]): boolean {
+  return coupling && coupling.length > 0;
 }
 
 program.parse();
