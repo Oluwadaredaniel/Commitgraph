@@ -10,5 +10,5 @@ export interface AnalyzerResult {
   name: string;
   score: number;
   insights: string[];
-  data: any; // Result payload specific to the analyzer
+  data: unknown; // Result payload specific to the analyzer
 }
