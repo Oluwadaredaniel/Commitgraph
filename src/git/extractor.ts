@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { CommitRecord } from '../types';
+import { CommitRecord } from '../types/index.js';
 
 export class GitExtractor {
   private repoPath: string;
