@@ -2,65 +2,54 @@ import { spawn } from 'child_process';
 import { CommitRecord } from '../types/index.js';
 
 export class GitExtractor {
-  private repoPath: string;
+  private readonly ignoredFiles = [
+    'package-lock.json',
+    'yarn.lock',
+    'pnpm-lock.yaml',
+    '.eslintrc.json',
+    'eslint.config.mjs',
+    '.gitignore'
+  ];
 
-  constructor(repoPath: string) {
-    this.repoPath = repoPath;
-  }
+  constructor(private repoPath: string) {}
 
   public async extractLog(): Promise<CommitRecord[]> {
     return new Promise((resolve, reject) => {
-      const git = spawn('git', ['log', '--pretty=format:%H|%an|%at|%s', '--name-only'], {
+      const git = spawn('git', ['log', '--name-only', '--pretty=format:%H|%an|%at|%s'], {
         cwd: this.repoPath,
       });
 
-      let rawOutput = '';
-      let errorOutput = '';
-
-      git.stdout.on('data', (data) => {
-        rawOutput += data.toString();
-      });
-
-      git.stderr.on('data', (data) => {
-        errorOutput += data.toString();
-      });
-
-      git.on('close', (code) => {
-        if (code !== 0) {
-          reject(new Error(`Git failed: ${errorOutput}`));
-          return;
-        }
-        resolve(this.parseRawLog(rawOutput));
-      });
+      let output = '';
+      git.stdout.on('data', (data) => (output += data.toString()));
+      git.on('close', () => resolve(this.parseLog(output)));
+      git.on('error', reject);
     });
   }
 
-  private parseRawLog(raw: string): CommitRecord[] {
-    const lines = raw.split(/\r?\n/);
+  // Changed from private to public so tests can access it
+  public parseLog(rawLog: string): CommitRecord[] {
     const commits: CommitRecord[] = [];
-    let currentCommit: CommitRecord | null = null;
+    const blocks = rawLog.split('\n\n');
 
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) continue;
+    for (const block of blocks) {
+      const lines = block.trim().split('\n');
+      if (lines.length < 1) continue;
 
-      const parts = trimmedLine.split('|');
+      const [hash, author, timestamp, message] = lines[0].split('|');
+      if (!hash) continue;
 
-      // If the line has 4 parts and the first part looks like a hex hash
-      if (parts.length >= 4 && /^[0-9a-f]+$/i.test(parts[0])) {
-        currentCommit = {
-          hash: parts[0],
-          author: parts[1],
-          timestamp: parseInt(parts[2], 10),
-          message: parts[3],
-          files: [],
-        };
-        commits.push(currentCommit);
-      } else if (currentCommit) {
-        currentCommit.files.push(trimmedLine);
+      const files = lines.slice(1).filter(f => !this.ignoredFiles.includes(f.trim()));
+
+      if (files.length > 0) {
+        commits.push({
+          hash,
+          author,
+          timestamp: parseInt(timestamp, 10),
+          message,
+          files,
+        });
       }
     }
-
     return commits;
   }
 }

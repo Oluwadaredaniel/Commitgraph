@@ -1,36 +1,50 @@
 import { CommitRecord } from '../types/index.js';
+import fs from 'fs';
+import path from 'path';
 
 export interface HotspotMetric {
   file: string;
   changeCount: number;
-  score: number; // Normalized score 0-10
+  sloc: number;
+  score: number;
 }
 
 export class HotspotAnalyzer {
+  private getSLOC(filePath: string): number {
+    try {
+      const fullPath = path.resolve(process.cwd(), filePath);
+      if (!fs.existsSync(fullPath)) return 0;
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      return content.split('\n').length;
+    } catch {
+      return 0;
+    }
+  }
+
   public analyze(commits: CommitRecord[]): HotspotMetric[] {
     const fileCounts: Record<string, number> = {};
 
-    // 1. Count occurrences of each file
     commits.forEach(commit => {
       commit.files.forEach(file => {
         fileCounts[file] = (fileCounts[file] || 0) + 1;
       });
     });
 
-    // 2. Convert to array and find max changes for scoring
-    const metrics = Object.entries(fileCounts).map(([file, count]) => ({
-      file,
-      changeCount: count
-    }));
+    const metrics = Object.entries(fileCounts).map(([file, count]) => {
+      const sloc = this.getSLOC(file);
+      // Risk = Churn * Logarithmic Complexity
+      // We use Log10 so that a 1000-line file is weighted significantly but doesn't 
+      // completely break the scale compared to a 100-line file.
+      const score = count * (sloc > 0 ? Math.log10(sloc + 1) : 1);
 
-    const maxChanges = Math.max(...metrics.map(m => m.changeCount), 1);
+      return {
+        file,
+        changeCount: count,
+        sloc,
+        score: parseFloat(score.toFixed(2))
+      };
+    });
 
-    // 3. Return sorted results with scores
-    return metrics
-      .map(m => ({
-        ...m,
-        score: parseFloat(((m.changeCount / maxChanges) * 10).toFixed(2))
-      }))
-      .sort((a, b) => b.changeCount - a.changeCount);
+    return metrics.sort((a, b) => b.score - a.score);
   }
 }

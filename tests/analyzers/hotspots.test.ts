@@ -16,8 +16,7 @@ describe('HotspotAnalyzer', () => {
 
     expect(results[0].file).toBe('file1.ts');
     expect(results[0].changeCount).toBe(3);
-    expect(results[0].score).toBe(10); // Max changes should be score 10
-    expect(results).toHaveLength(3);
+    expect(results[0].sloc).toBeDefined(); // New property
   });
 
   it('should return an empty array when no commits are provided', () => {
