@@ -1,0 +1,12 @@
+# Enforce LF (Unix) line endings for all text files
+* text=auto eol=lf
+
+# Explicitly set weights for specific files
+*.ts text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+
+# Denotate binary files (so Git doesn't try to fix line endings in images)
+*.png binary
+*.jpg binary
