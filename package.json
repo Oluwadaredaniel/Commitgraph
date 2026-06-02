@@ -10,7 +10,8 @@
     "format": "prettier --write \"**/*.ts\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepare": "husky"
+    "prepare": "husky",
+    "start": "tsx src/index.ts"
   },
   "keywords": [],
   "author": "",
