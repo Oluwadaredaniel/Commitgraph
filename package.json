@@ -4,12 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-  "build": "tsc",
-  "lint": "eslint \"src/**/*.ts\"",
-  "format": "prettier --write \"src/**/*.ts\"",
-  "test": "echo \"Tests not yet implemented\" && exit 0",
-  "prepare": "husky"
-},
+    "build": "tsc",
+    "lint": "eslint \"src/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "husky"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -17,11 +18,13 @@
     "@commitlint/cli": "^21.0.2",
     "@commitlint/config-conventional": "^21.0.2",
     "@types/node": "^25.9.1",
+    "@vitest/coverage-v8": "^4.1.8",
     "eslint": "^10.4.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.3",
     "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
   }
 }
