@@ -20,7 +20,8 @@
   "author": "Oluwadare Daniel",
   "license": "ISC",
   "dependencies": {
-    "chalk": "^5.6.2"
+    "chalk": "^5.6.2",
+    "commander": "^15.0.0"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.0.2",
